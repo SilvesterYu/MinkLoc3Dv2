@@ -1,0 +1,29 @@
+{
+    "os": "Linux-5.15.0-41-generic-x86_64-with-glibc2.10",
+    "python": "3.8.0",
+    "heartbeatAt": "2022-07-25T09:32:16.640032",
+    "startedAt": "2022-07-25T09:32:15.699967",
+    "docker": null,
+    "gpu": "NVIDIA GeForce RTX 3080 Laptop GPU",
+    "gpu_count": 1,
+    "cpu_count": 16,
+    "cuda": null,
+    "args": [
+        "--config",
+        "../config/config_baseline.txt",
+        "--model_config",
+        "../models/minkloc3dv2.txt"
+    ],
+    "state": "running",
+    "program": "train.py",
+    "codePath": "training/train.py",
+    "git": {
+        "remote": "https://github.com/SilvesterYu/MinkLoc3Dv2.git",
+        "commit": "d069ac07fbec136d85f89055ac0020fae9a83af9"
+    },
+    "email": "ly1164@nyu.edu",
+    "root": "/home/silvey/Documents/GitHub/MinkLoc3Dv2",
+    "host": "silvey",
+    "username": "root",
+    "executable": "/root/anaconda3/envs/minklocv2/bin/python"
+}

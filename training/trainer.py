@@ -14,6 +14,10 @@ from models.model_factory import model_factory
 from datasets.dataset_utils import make_dataloaders
 from eval.pnv_evaluate import evaluate, print_eval_stats, pnv_write_eval_stats
 
+# --
+from sys import getsizeof
+import psutil
+# --
 
 def print_global_stats(phase, stats):
     s = f"{phase}  loss: {stats['loss']:.4f}   embedding norm: {stats['avg_embedding_norm']:.3f}  "
@@ -71,7 +75,7 @@ def training_step(global_iter, model, phase, device, optimizer, loss_fn):
 
     return stats
 
-
+# -- training here
 def multistaged_training_step(global_iter, model, phase, device, optimizer, loss_fn):
     # Training step using multistaged backpropagation algorithm as per:
     # "Learning with Average Precision: Training Image Retrieval with a Listwise Loss"
@@ -81,6 +85,13 @@ def multistaged_training_step(global_iter, model, phase, device, optimizer, loss
 
     assert phase in ['train', 'val']
     batch, positives_mask, negatives_mask = next(global_iter)
+    #print("------ mem of batch ------")
+    #print(getsizeof(batch))
+
+    #print("--- multistaged_training_step ---")
+    #print(batch)
+    #print("-------- mem ----------")
+    #print(psutil.virtual_memory().percent)
 
     if phase == 'train':
         model.train()
@@ -161,10 +172,17 @@ def do_train(params: TrainingParams):
     model.to(device)
     print('Model device: {}'.format(device))
 
+    # -- below takes a lot of memory --- #
+
     # set up dataloaders
     dataloaders = make_dataloaders(params)
 
+    print("dataloader size")
+    print(getsizeof(dataloaders))
+
     loss_fn = make_losses(params)
+
+    # -- above takes a lot of memory -- #
 
     # Training elements
     if params.optimizer == 'Adam':
@@ -196,6 +214,7 @@ def do_train(params: TrainingParams):
         # Multi-staged training approach with large batch split into multiple smaller chunks with batch_split_size elems
         train_step_fn = multistaged_training_step
 
+    """
     ###########################################################################
     # Initialize Weights&Biases logging service
     ###########################################################################
@@ -204,6 +223,7 @@ def do_train(params: TrainingParams):
     model_params_dict = {"model_params." + e: params.model_params.__dict__[e] for e in params.model_params.__dict__}
     params_dict.update(model_params_dict)
     wandb.init(project='MinkLoc2', config=params_dict)
+    """
 
     ###########################################################################
     #
@@ -228,23 +248,33 @@ def do_train(params: TrainingParams):
 
             if phase == 'train':
                 global_iter = iter(dataloaders['train'])
+                print(getsizeof(global_iter))
             else:
                 global_iter = None if dataloaders['val'] is None else iter(dataloaders['val'])
 
+            print("batch no. 1")
             while True:
+            # --
+            #for batch, positives_mask, negatives_mask in dataloaders[phase]:
+            # --
                 count_batches += 1
+                if count_batches % 100 == 0:
+                    print("batch no. ", count_batches)
                 batch_stats = {}
                 if params.debug and count_batches > 2:
                     break
 
                 try:
                     temp_stats = train_step_fn(global_iter, model, phase, device, optimizer, loss_fn)
+                    #print("----------- size --------------")
+                    #print(getsizeof(temp_stats))
                     batch_stats['global'] = temp_stats
 
                 except StopIteration:
                     # Terminate the epoch when one of dataloders is exhausted
                     break
-
+                #print("--------- batch stats ---------")
+                #print(batch_stats)
                 running_stats.append(batch_stats)
 
             # Compute mean stats for the phase
@@ -281,7 +311,11 @@ def do_train(params: TrainingParams):
 
         # ******* FINALIZE THE EPOCH *******
 
-        wandb.log(metrics)
+        # wandb.log(metrics)
+        # --
+        print("+++++++++++++ metrics +++++++++++++")
+        print(metrics)
+        # --
 
         if scheduler is not None:
             scheduler.step()
@@ -293,9 +327,21 @@ def do_train(params: TrainingParams):
             # Dynamic batch size expansion based on number of non-zero triplets
             # Ratio of non-zero triplets
             le_train_stats = stats['train'][-1]  # Last epoch training stats
-            rnz = le_train_stats['global']['num_non_zero_triplets'] / le_train_stats['global']['num_triplets']
-            if rnz < params.batch_expansion_th:
-                dataloaders['train'].batch_sampler.expand_batch()
+            if 'num_non_zero_triplets' not in le_train_stats:
+                print('WARNING: Batch size expansion is enabled, but the loss function is not supported')
+            else:
+                rnz = le_train_stats['global']['num_non_zero_triplets'] / le_train_stats['global']['num_triplets']
+                if rnz < params.batch_expansion_th:
+                    dataloaders['train'].batch_sampler.expand_batch()
+
+            epoch_train_stats = stats['train'][-1]
+            if 'num_non_zero_triplets' not in epoch_train_stats:
+                print('WARNING: Batch size expansion is enabled, but the loss function is not supported')
+            else:
+                # Ratio of non-zero triplets
+                rnz = epoch_train_stats['num_non_zero_triplets'] / epoch_train_stats['num_triplets']
+                if rnz < params.batch_expansion_th:
+                    dataloaders['train'].batch_sampler.expand_batch()
 
     print('')
 

@@ -15,6 +15,7 @@ def make_losses(params: TrainingParams):
     elif params.loss == 'batchhardcontrastiveloss':
         loss_fn = BatchHardContrastiveLossWithMasks(params.pos_margin, params.neg_margin)
     elif params.loss == 'truncatedsmoothap':
+        # config.baseline.txt loss = TruncatedSmoothAP
         loss_fn = TruncatedSmoothAP(tau1=params.tau1, similarity=params.similarity,
                                     positives_per_query=params.positives_per_query)
     else:

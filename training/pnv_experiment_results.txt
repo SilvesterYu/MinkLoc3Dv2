@@ -1,0 +1,2 @@
+minkloc3dv2.txt, config_baseline.txt, model_MinkLoc_20220726_1336_final, 11.66, 4.54, 16.43, 8.12, 17.74, 10.49, 19.01, 13.30, 16.21, 9.11
+minkloc3dv2.txt, config_baseline.txt, model_MinkLoc_20220726_1540_final, 4.83, 1.38, 6.32, 2.13, 5.92, 2.35, 7.12, 4.14, 6.05, 2.50

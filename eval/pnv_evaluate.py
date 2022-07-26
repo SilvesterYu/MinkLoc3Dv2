@@ -119,6 +119,7 @@ def compute_embedding(model, pc, device, params: TrainingParams):
         # Compute global descriptor
         y = model(batch)
         embedding = y['global'].detach().cpu().numpy()
+        # embedding = y['global'].detach().cpu().numpy()
 
     return embedding
 

@@ -7,6 +7,11 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
+import psutil
+from sys import getsizeof
+from bitarray import bitarray
+import tqdm
+
 
 class TrainingTuple:
     # Tuple describing an element for training/validation
@@ -40,7 +45,7 @@ class EvaluationTuple:
     def to_tuple(self):
         return self.timestamp, self.rel_scan_filepath, self.position
 
-
+# -- problem2
 class TrainingDataset(Dataset):
     def __init__(self, dataset_path, query_filename, transform=None, set_transform=None):
         # remove_zero_points: remove points with all zero coords
@@ -50,18 +55,44 @@ class TrainingDataset(Dataset):
         assert os.path.exists(self.query_filepath), 'Cannot access query file: {}'.format(self.query_filepath)
         self.transform = transform
         self.set_transform = set_transform
-        self.queries: Dict[int, TrainingTuple] = pickle.load(open(self.query_filepath, 'rb'))
-        print('{} queries in the dataset'.format(len(self)))
+        print("----- before pickle load trainingdataset mem ---")
+        print(psutil.virtual_memory().percent)
+        #self.queries: Dict[int, TrainingTuple] = pickle.load(open(self.query_filepath, 'rb'))
+        print("filepath: ", self.query_filepath)
 
         # pc_loader must be set in the inheriting class
         self.pc_loader: PointCloudLoader = None
+
+        # --
+        cached_query_filepath = os.path.splitext(self.query_filepath)[0] + '_cached.pickle'
+        if not os.path.exists(cached_query_filepath):
+            # Pre-process query file
+            self.queries = self.preprocess_queries(self.query_filepath, cached_query_filepath)
+        else:
+            print('Loading preprocessed query file: {}...'.format(cached_query_filepath))
+            with open(cached_query_filepath, 'rb') as handle:
+                # key:{'query':file,'positives':[files],'negatives:[files], 'neighbors':[keys]}
+                self.queries = pickle.load(handle)
+        # --
+        print("------ size of self.queries -----")
+        print(getsizeof(self.queries))
+        print("----- trainingdataset mem ---")
+        print(psutil.virtual_memory().percent)
+
+        print('{} queries in the dataset'.format(len(self)))
+        #print(self.queries.keys())
+
 
     def __len__(self):
         return len(self.queries)
 
     def __getitem__(self, ndx):
         # Load point cloud and apply transform
-        file_pathname = os.path.join(self.dataset_path, self.queries[ndx].rel_scan_filepath)
+        # --
+        #print(self.queries[ndx].keys())
+        file_pathname = os.path.join(self.dataset_path, self.queries[ndx]["query"])
+        # --
+        #file_pathname = os.path.join(self.dataset_path, self.queries[ndx].rel_scan_filepath)
         query_pc = self.pc_loader(file_pathname)
         query_pc = torch.tensor(query_pc, dtype=torch.float)
         if self.transform is not None:
@@ -69,10 +100,40 @@ class TrainingDataset(Dataset):
         return query_pc, ndx
 
     def get_positives(self, ndx):
-        return self.queries[ndx].positives
+        # --
+        return self.queries[ndx]["positives"]
+        # --
+        #return self.queries[ndx].positives
 
     def get_non_negatives(self, ndx):
-        return self.queries[ndx].non_negatives
+        # --
+        return self.queries[ndx]["non_negatives"]
+        # --
+        #return self.queries[ndx].non_negatives
+
+    # --
+    def preprocess_queries(self, query_filepath, cached_query_filepath):
+        print('Loading query file: {} for preprocessing...'.format(query_filepath))
+        with open(query_filepath, 'rb') as handle:
+            # key:{'query':file,'positives':[files],'negatives:[files], 'neighbors':[keys]}
+            queries = pickle.load(handle)
+
+        # Convert to bitarray
+        for ndx in tqdm.tqdm(queries):
+            queries[ndx]['positives'] = set(queries[ndx]['positives'])
+            queries[ndx]['negatives'] = set(queries[ndx]['negatives'])
+            pos_mask = [e_ndx in queries[ndx]['positives'] for e_ndx in range(len(queries))]
+            neg_mask = [e_ndx in queries[ndx]['negatives'] for e_ndx in range(len(queries))]
+            queries[ndx]['positives'] = bitarray(pos_mask)
+            queries[ndx]['negatives'] = bitarray(neg_mask)
+
+        with open(cached_query_filepath, 'wb') as handle:
+            pickle.dump(queries, handle)
+
+        print("Preprocess done. saved to ", cached_query_filepath)
+
+        return queries
+    #--
 
 
 class EvaluationSet:

@@ -16,6 +16,8 @@ from misc.utils import TrainingParams
 from datasets.base_datasets import PointCloudLoader
 from datasets.pointnetvlad.pnv_raw import PNVPointCloudLoader
 
+import psutil
+
 
 def get_pointcloud_loader(dataset_type) -> PointCloudLoader:
     return PNVPointCloudLoader()
@@ -23,14 +25,20 @@ def get_pointcloud_loader(dataset_type) -> PointCloudLoader:
 
 def make_datasets(params: TrainingParams, validation: bool = True):
     # Create training and validation datasets
+    
     datasets = {}
     train_set_transform = TrainSetTransform(params.set_aug_mode)
-
+    
     # PoinNetVLAD datasets (RobotCar and Inhouse)
     # PNV datasets have their own transform
     train_transform = PNVTrainTransform(params.aug_mode)
+    print("--- begin make_datasets() ---")
+    print(psutil.virtual_memory().percent)
+    # -- problem
     datasets['train'] = PNVTrainingDataset(params.dataset_folder, params.train_file,
                                            transform=train_transform, set_transform=train_set_transform)
+    print("--- after PNVTrainingDataset ---")
+    print(psutil.virtual_memory().percent)
     if validation:
         datasets['val'] = PNVTrainingDataset(params.dataset_folder, params.val_file)
 
@@ -54,8 +62,12 @@ def make_collate_fn(dataset: TrainingDataset, quantizer, batch_split_size=None):
 
         # Compute positives and negatives mask
         # dataset.queries[label]['positives'] is bitarray
-        positives_mask = [[in_sorted_array(e, dataset.queries[label].positives) for e in labels] for label in labels]
-        negatives_mask = [[not in_sorted_array(e, dataset.queries[label].non_negatives) for e in labels] for label in labels]
+        # --
+        positives_mask = [[in_sorted_array(e, dataset.queries[label]["positives"]) for e in labels] for label in labels]
+        negatives_mask = [[in_sorted_array(e, dataset.queries[label]["negatives"]) for e in labels] for label in labels]
+        # --
+        #positives_mask = [[in_sorted_array(e, dataset.queries[label].positives) for e in labels] for label in labels]
+        #negatives_mask = [[not in_sorted_array(e, dataset.queries[label].non_negatives) for e in labels] for label in labels]
         positives_mask = torch.tensor(positives_mask)
         negatives_mask = torch.tensor(negatives_mask)
 
@@ -94,15 +106,23 @@ def make_dataloaders(params: TrainingParams, validation=True):
     :param model_params:
     :return:
     """
-    datasets = make_datasets(params, validation=validation)
+    print("------- begin of dataloaders ----------")
+    print(psutil.virtual_memory().percent)
 
+    datasets = make_datasets(params, validation=validation)
+    
+    print("------------ after make datasets of dataloader -------------")
+    print(psutil.virtual_memory().percent)
     dataloders = {}
+    quantizer = params.model_params.quantizer
+
     train_sampler = BatchSampler(datasets['train'], batch_size=params.batch_size,
                                  batch_size_limit=params.batch_size_limit,
                                  batch_expansion_rate=params.batch_expansion_rate)
 
     # Collate function collates items into a batch and applies a 'set transform' on the entire batch
-    quantizer = params.model_params.quantizer
+
+    
     train_collate_fn = make_collate_fn(datasets['train'],  quantizer, params.batch_split_size)
     dataloders['train'] = DataLoader(datasets['train'], batch_sampler=train_sampler,
                                      collate_fn=train_collate_fn, num_workers=params.num_workers,
