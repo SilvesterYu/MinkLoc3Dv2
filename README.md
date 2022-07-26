@@ -1,3 +1,9 @@
+To install Minkowski Engine 0.5.4, run
+```
+pip install -U git+https://github.com/NVIDIA/MinkowskiEngine -v --no-deps --install-option="--blas_include_dirs=${CONDA_PREFIX}/include" 
+--install-option="--blas=openblas"
+```
+
 # Improving Point Cloud Based Place Recognition with Ranking-based Loss and Large Batch Training
 ## MinkLoc3Dv2 is an improved version of our earlier point cloud descriptor MinkLoc3D. MinkLoc3Dv2 outperforms SOTA on standard benchmarks (as per February 2022).  
 
